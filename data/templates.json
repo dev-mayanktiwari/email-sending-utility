@@ -1,0 +1,13 @@
+{
+  "recruiter_outreach": {
+    "name": "Recruiter Outreach",
+    "subject": "Eager to Contribute to ${company} \u2013 Fullstack Engineer Application",
+    "body": "Hi ${name},\n\nI hope you're doing well.\n\nI'm reaching out to express my keen interest in joining **${company}** as a Fullstack Engineer.\n\nI have hands-on experience building scalable systems using **Node.js, React.js, Next.js, PostgreSQL, and MongoDB**, and have worked extensively across **AWS, GCP, Azure, and Kubernetes** to deploy and manage cloud-native applications.\n\nI'm passionate about solving real-world problems through efficient engineering and clean, maintainable code. I've attached my resume for your reference and would be grateful for an opportunity to chat or contribute in any way that adds value to your team.\n\nLooking forward to hearing from you.\n\nWarm regards,  \n\nMayank Tiwari  \nContact: 9319557584  \nGithub: https://www.github.com/dev-mayanktiwari  \nResume: https://drive.google.com/file/d/1tFdzcqGoUzwy5LkBUTPdg6v4f71dOcDs/view",
+    "variables": [
+      "name",
+      "company"
+    ],
+    "created_at": "2026-06-18T20:47:46.530014",
+    "updated_at": "2026-06-18T20:47:46.530031"
+  }
+}

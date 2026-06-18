@@ -1,196 +1,161 @@
+"""
+MailForge — Recruiter outreach, simplified.
+Entry point for the Streamlit application.
+"""
+import csv
+import io
 import streamlit as st
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-import re
-import string
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
+from config import APP_NAME, APP_ICON, APP_VERSION
+from ui.styles import inject_custom_css, render_header, render_section_divider, render_metric_card, render_status_badge
+from ui.credentials import render_credentials_sidebar
+from ui.quick_send import render_quick_send
+from ui.template_mode import render_template_mode
+from storage.history import get_history, get_history_stats, clear_history
 
-def is_valid_email(email):
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
 
-def send_email(sender_email, sender_password, sender_name, recipient_email, subject, body):
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = f"{sender_name} <{sender_email}>"
-        msg['To'] = recipient_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'html'))
+def render_history_tab():
+    """Render the History tab."""
+    st.markdown("""
+    <div class="glass-card">
+        <h3>📊 Send History</h3>
+        <p style="color: #8b8fa3; margin: 0;">Track every email sent — successes, failures, and timestamps.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-        with smtplib.SMTP('smtp.gmail.com', 587) as server:
-            server.starttls()
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, recipient_email, msg.as_string())
+    # Stats
+    stats = get_history_stats()
 
-        return True, "Email sent successfully!"
-    except Exception as e:
-        return False, f"Failed to send email: {str(e)}"
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown(render_metric_card(stats["total"], "Total Sent"), unsafe_allow_html=True)
+    with col2:
+        st.markdown(render_metric_card(stats["successful"], "Successful"), unsafe_allow_html=True)
+    with col3:
+        st.markdown(render_metric_card(stats["failed"], "Failed"), unsafe_allow_html=True)
+    with col4:
+        st.markdown(render_metric_card(f"{stats['success_rate']}%", "Success Rate"), unsafe_allow_html=True)
 
-def convert_markdown_to_html(text):
-    # Simple markdown replacements
-    text = text.replace('**', '<strong>', 1)
-    text = text.replace('**', '</strong>', 1)
-    text = text.replace('**', '<strong>', 1)
-    text = text.replace('**', '</strong>', 1)
-    return text.replace('\n', '<br>')
+    render_section_divider()
+
+    # History list
+    history = get_history(limit=100)
+
+    if history:
+        # Filters
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            filter_status = st.selectbox(
+                "Filter",
+                ["All", "Successful", "Failed"],
+                key="history_filter",
+            )
+
+        if filter_status == "Successful":
+            history = [h for h in history if h.get("success")]
+        elif filter_status == "Failed":
+            history = [h for h in history if not h.get("success")]
+
+        st.markdown(f"**Showing {len(history)} entries:**")
+
+        for entry in history:
+            status_html = render_status_badge(entry.get("success", False))
+            mode_label = "⚡" if entry.get("mode") == "quick" else "📝"
+            template_info = f" · Template: {entry['template']}" if entry.get("template") else ""
+
+            # Format timestamp
+            ts = entry.get("timestamp", "")
+            if ts:
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(ts)
+                    ts = dt.strftime("%b %d, %Y %I:%M %p")
+                except (ValueError, TypeError):
+                    pass
+
+            st.markdown(f"""
+            <div class="history-row">
+                {status_html} &nbsp;
+                {mode_label} &nbsp;
+                <strong>{entry.get('recipient', 'Unknown')}</strong> &nbsp;·&nbsp;
+                {entry.get('subject', 'No subject')}{template_info} &nbsp;·&nbsp;
+                <span style="color: #8b8fa3; font-size: 0.8rem;">{ts}</span>
+                {"<br><span style='color: #ef4444; font-size: 0.8rem;'>Error: " + entry.get('error', '') + "</span>" if entry.get('error') else ""}
+            </div>
+            """, unsafe_allow_html=True)
+
+        render_section_divider()
+
+        # Export CSV
+        col_export, col_clear, _ = st.columns([1, 1, 3])
+        with col_export:
+            if history:
+                output = io.StringIO()
+                writer = csv.DictWriter(
+                    output,
+                    fieldnames=["timestamp", "recipient", "subject", "success", "mode", "template", "error"],
+                    extrasaction="ignore",
+                )
+                writer.writeheader()
+                writer.writerows(history)
+                st.download_button(
+                    label="📥 Export CSV",
+                    data=output.getvalue(),
+                    file_name="mailforge_history.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+        with col_clear:
+            if st.button("🧹 Clear History", key="clear_history", use_container_width=True):
+                clear_history()
+                st.success("History cleared.")
+                st.rerun()
+    else:
+        st.info("No emails sent yet. Your send history will appear here.")
+
 
 def main():
-    st.title("📧 Personalized Email Sender")
+    """Application entry point."""
+    st.set_page_config(
+        page_title=APP_NAME,
+        page_icon=APP_ICON,
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
 
-    # Load from .env if not given manually
-    env_sender_email = os.getenv("SENDER_EMAIL", "")
-    env_sender_password = os.getenv("SENDER_PASSWORD", "")
-    env_sender_name = os.getenv("SENDER_NAME", "Sender")
+    # Inject custom CSS
+    inject_custom_css()
 
-    with st.expander("🔐 Email Credentials", expanded=True):
-        sender_email = st.text_input("Your Email Address", value=env_sender_email)
-        sender_password = st.text_input("Your Email Password", value=env_sender_password, type="password")
-        sender_name = st.text_input("Your Name", value=env_sender_name)
+    # Render header
+    render_header()
 
-    with st.expander("📄 Email Template", expanded=True):
-        st.markdown("### ✨ Default Template")
-        st.code("""title: Eager to Contribute to ${company} – Fullstack Engineer Application
-Hi ${name},
-I hope you're doing well.
-...""")
-        
-        custom_template = st.text_area("📝 Customize Email Template", 
-        """title: Eager to Contribute to ${company} – Fullstack Engineer Application
-Hi ${name},
+    # Render sidebar credentials
+    render_credentials_sidebar()
 
-I hope you're doing well.
+    # Main tabs
+    tab_quick, tab_template, tab_history = st.tabs([
+        "🚀 Quick Send",
+        "📝 Template Mode",
+        "📊 History",
+    ])
 
-I'm reaching out to express my keen interest in joining ${company} as a Fullstack Engineer.
+    with tab_quick:
+        render_quick_send()
 
-I have hands-on experience building scalable systems using **Node.js, React.js, Next.js, PostgreSQL, and MongoDB**, and have worked extensively across **AWS, GCP, Azure, and Kubernetes** to deploy and manage cloud-native applications.
+    with tab_template:
+        render_template_mode()
 
-I'm passionate about solving real-world problems through efficient engineering and clean, maintainable code. I've attached my resume for your reference and would be grateful for an opportunity to chat or contribute in any way that adds value to your team.
+    with tab_history:
+        render_history_tab()
 
-Looking forward to hearing from you.
+    # Footer
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(
+        f'<p style="color: #8b8fa3; font-size: 0.75rem; text-align: center;">'
+        f'{APP_NAME} v{APP_VERSION}<br>Built for recruiter outreach</p>',
+        unsafe_allow_html=True,
+    )
 
-Warm regards,  
-
-Mayank Tiwari  
-Contact: 9319557584  
-Github: https://www.github.com/dev-mayanktiwari  
-Resume: https://drive.google.com/file/d/1tFdzcqGoUzwy5LkBUTPdg6v4f71dOcDs/view""", height=380)
-
-    st.markdown("### 👥 Add Recipients")
-
-    if 'recipients' not in st.session_state:
-        st.session_state.recipients = []
-
-    col1, col2, col3 = st.columns([2, 2, 2])
-    with col1:
-        recipient_email = st.text_input("Recipient Email")
-    with col2:
-        recipient_name = st.text_input("Recipient Name")
-    with col3:
-        recipient_company = st.text_input("Company Name")
-
-    if st.button("➕ Add Recipient"):
-        if recipient_email and recipient_name and recipient_company:
-            if is_valid_email(recipient_email):
-                st.session_state.recipients.append({
-                    "email": recipient_email,
-                    "name": recipient_name,
-                    "company": recipient_company
-                })
-                st.success(f"Added {recipient_name} from {recipient_company}")
-            else:
-                st.error("Invalid email format.")
-        else:
-            st.warning("Please fill in all fields.")
-
-    if st.session_state.recipients:
-        st.markdown("### 📋 Recipients List")
-        for i, rec in enumerate(st.session_state.recipients):
-            col1, col2 = st.columns([5, 1])
-            with col1:
-                st.write(f"{rec['name']} ({rec['email']}) - {rec['company']}")
-            with col2:
-                if st.button("🗑️ Remove", key=f"remove_{i}"):
-                    st.session_state.recipients.pop(i)
-                    st.rerun()
-
-    with st.expander("📥 Bulk Import"):
-        bulk_recipients = st.text_area("Paste CSV (email,name,company per line)", 
-        placeholder="example@example.com,John Doe,Example Inc.")
-        if st.button("📤 Import Recipients"):
-            lines = bulk_recipients.strip().split('\n')
-            success, fail = 0, 0
-            for line in lines:
-                try:
-                    email, name, company = [x.strip() for x in line.split(',')]
-                    if is_valid_email(email):
-                        st.session_state.recipients.append({
-                            "email": email,
-                            "name": name,
-                            "company": company
-                        })
-                        success += 1
-                    else:
-                        fail += 1
-                except:
-                    fail += 1
-            if success:
-                st.success(f"Imported {success} recipients.")
-            if fail:
-                st.error(f"Failed to import {fail} lines.")
-            if success:
-                st.rerun()
-
-    if st.session_state.recipients:
-        template_lines = custom_template.split('\n')
-        subject_template = "Fullstack Engineer Application"
-        body_template = custom_template
-
-        if template_lines[0].lower().startswith("title:"):
-            subject_template = template_lines[0][6:].strip()
-            body_template = '\n'.join(template_lines[1:])
-
-        with st.expander("📬 Preview First Email"):
-            first = st.session_state.recipients[0]
-            subject = string.Template(subject_template).substitute(company=first['company'])
-            body = string.Template(body_template).substitute(name=first['name'], company=first['company'])
-            st.markdown("**Subject:**")
-            st.write(subject)
-            st.markdown("**Body:**")
-            st.markdown(body)
-
-        if st.button("🚀 Send Emails"):
-            if not sender_email or not sender_password:
-                st.error("Email credentials are required.")
-                return
-
-            success, failure = 0, 0
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-
-            for i, rec in enumerate(st.session_state.recipients):
-                progress_bar.progress((i + 1) / len(st.session_state.recipients))
-                status_text.text(f"Sending to {rec['email']}...")
-
-                subject = string.Template(subject_template).substitute(company=rec['company'])
-                body = string.Template(body_template).substitute(name=rec['name'], company=rec['company'])
-                html_body = convert_markdown_to_html(body)
-
-                sent, msg = send_email(sender_email, sender_password, sender_name, rec['email'], subject, html_body)
-                if sent:
-                    success += 1
-                else:
-                    st.warning(f"❌ {rec['email']} - {msg}")
-                    failure += 1
-
-            st.success(f"✅ Sent: {success}")
-            if failure:
-                st.error(f"❌ Failed: {failure}")
-    else:
-        st.info("Add at least one recipient to start sending emails.")
 
 if __name__ == "__main__":
     main()
