@@ -305,49 +305,32 @@ def inject_custom_css():
         background: rgba(30, 41, 59, 0.3) !important;
         border: 1px solid rgba(148, 163, 184, 0.1) !important;
         border-radius: 12px !important;
-        overflow: hidden;
     }
 
     details[data-testid="stExpander"] summary {
         color: #e2e8f0 !important;
         font-weight: 500 !important;
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        gap: 0.5rem !important;
-        padding: 0.75rem 1rem !important;
+        list-style: none;
+        padding: 0.6rem 1rem;
         cursor: pointer;
-        list-style: none !important;
     }
 
-    /* Hide the default browser disclosure triangle */
+    /* Hide browser's native disclosure arrow */
     details[data-testid="stExpander"] summary::-webkit-details-marker {
-        display: none !important;
+        display: none;
     }
 
     details[data-testid="stExpander"] summary::marker {
-        display: none !important;
-        content: "" !important;
+        display: none;
     }
 
-    /* Fix SVG arrow icon inside summary */
+    /* Keep Streamlit's SVG arrow visible and properly sized */
     details[data-testid="stExpander"] summary svg {
+        color: #94a3b8 !important;
         width: 1rem !important;
         height: 1rem !important;
-        min-width: 1rem !important;
-        min-height: 1rem !important;
-        flex-shrink: 0 !important;
-        fill: #94a3b8 !important;
-        transition: transform 0.2s ease !important;
-    }
-
-    /* Fix the span/text inside summary */
-    details[data-testid="stExpander"] summary span,
-    details[data-testid="stExpander"] summary p {
-        flex: 1 !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
+        vertical-align: middle;
+        transition: transform 0.2s ease;
     }
 
     details[data-testid="stExpander"] summary:hover {
@@ -355,7 +338,12 @@ def inject_custom_css():
     }
 
     details[data-testid="stExpander"] summary:hover svg {
-        fill: #e2e8f0 !important;
+        color: #e2e8f0 !important;
+    }
+
+    /* Expander body padding */
+    details[data-testid="stExpander"] > div[data-testid="stExpanderDetails"] {
+        padding: 0.5rem 0.25rem 0.25rem 0.25rem;
     }
 
     /* ── Slider ──────────────────────────────────────────── */
