@@ -2,12 +2,14 @@
 Custom CSS injection for a premium Streamlit UI.
 Works WITH Streamlit's dark theme (set in .streamlit/config.toml).
 """
+
 import streamlit as st
 
 
 def inject_custom_css():
     """Inject custom CSS to elevate Streamlit's dark theme."""
-    st.markdown("""
+    st.markdown(
+        """
     <style>
     /* ── Google Font ────────────────────────────────────── */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -538,17 +540,22 @@ def inject_custom_css():
         border-radius: 8px !important;
     }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_header():
     """Render the app header."""
-    st.markdown("""
+    st.markdown(
+        """
     <div class="app-header">
         <h1>🔥 MailForge</h1>
         <p>Recruiter outreach, simplified.</p>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_section_divider():
@@ -561,7 +568,9 @@ def render_variable_tags(variables: list[str]):
     if not variables:
         st.markdown("*No variables detected*")
         return
-    tags_html = " ".join(f'<span class="var-tag">${{{v}}}</span>' for v in variables)
+    tags_html = " ".join(
+        f'<span class="var-tag">&#36;{{{v}}}</span>' for v in variables
+    )
     st.markdown(tags_html, unsafe_allow_html=True)
 
 

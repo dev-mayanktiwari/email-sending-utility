@@ -1,18 +1,26 @@
 """
 Quick Send tab — fire-and-forget emails with no templates or variables.
 """
+
 import time
+
 import streamlit as st
 
+from storage.history import log_send
 from ui.credentials import get_credentials, is_connected
 from ui.styles import render_section_divider
 from utils.email_sender import send_email, send_test_email
-from utils.validators import is_valid_email
 from utils.markdown_parser import markdown_to_html, plain_text_to_html
-from storage.history import log_send
+from utils.validators import is_valid_email
 
 
-def _render_email_preview(subject: str, body: str, sender_name: str, sender_email: str, recipient_email: str = "recipient@example.com"):
+def _render_email_preview(
+    subject: str,
+    body: str,
+    sender_name: str,
+    sender_email: str,
+    recipient_email: str = "recipient@example.com",
+):
     """Render a visual email preview card showing exactly what the recipient sees."""
     use_markdown = st.session_state.get("format_as_markdown", True)
     if use_markdown:
@@ -20,9 +28,14 @@ def _render_email_preview(subject: str, body: str, sender_name: str, sender_emai
     else:
         body_html = plain_text_to_html(body, wrap_in_email=False)
 
-    from_display = f"{sender_name} &lt;{sender_email}&gt;" if sender_name else sender_email or "you@gmail.com"
+    from_display = (
+        f"{sender_name} &lt;{sender_email}&gt;"
+        if sender_name
+        else sender_email or "you@gmail.com"
+    )
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="
         background: #1e293b;
         border: 1px solid rgba(148, 163, 184, 0.15);
@@ -53,17 +66,22 @@ def _render_email_preview(subject: str, body: str, sender_name: str, sender_emai
             {body_html}
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_quick_send():
     """Render the Quick Send tab."""
-    st.markdown("""
+    st.markdown(
+        """
     <div class="glass-card">
         <h3>🚀 Quick Send</h3>
         <p style="color: #94a3b8; margin: 0;">Write once, send to many. No templates, no variables — just your message.</p>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # ── Compose ──────────────────────────────────────────────
     st.markdown("#### ✏️ Compose")
@@ -85,7 +103,7 @@ def render_quick_send():
             color, note = "#fb7185", "too long — may get clipped"
         st.markdown(
             f'<p style="font-size:0.78rem; color:{color}; margin-top:-8px;">'
-            f'{char_count} chars — {note}</p>',
+            f"{char_count} chars — {note}</p>",
             unsafe_allow_html=True,
         )
 
@@ -95,6 +113,20 @@ def render_quick_send():
         height=250,
         placeholder="Write your email body here...\n\nYou can use **Markdown** for formatting (bold, links, lists).",
     )
+
+    # ── Attachments ──────────────────────────────────────────
+    st.markdown("#### 📎 Attachments")
+    uploaded_files = st.file_uploader(
+        "Attach files (optional)",
+        accept_multiple_files=True,
+        key="qs_attachments",
+        label_visibility="collapsed",
+    )
+    if uploaded_files:
+        st.caption(
+            f"{len(uploaded_files)} file(s) attached: "
+            + ", ".join(f"`{f.name}`" for f in uploaded_files)
+        )
 
     # ── Email Preview ────────────────────────────────────────
     if body:
@@ -122,15 +154,31 @@ def render_quick_send():
     else:
         tooltip = "Send a test copy to your own inbox"
 
-    if st.button("📨 Send Test to Myself", key="qs_test_send", disabled=not can_test, help=tooltip):
+    if st.button(
+        "📨 Send Test to Myself",
+        key="qs_test_send",
+        disabled=not can_test,
+        help=tooltip,
+    ):
         sender_email, sender_password, sender_name, reply_to = get_credentials()
         use_markdown = st.session_state.get("format_as_markdown", True)
         if use_markdown:
             html_body = markdown_to_html(body)
         else:
             html_body = plain_text_to_html(body)
+        attachments = [
+            {"name": f.name, "data": f.read()} for f in (uploaded_files or [])
+        ]
         with st.spinner("Sending test email..."):
-            result = send_test_email(sender_email, sender_password, sender_name, subject, html_body, reply_to)
+            result = send_test_email(
+                sender_email,
+                sender_password,
+                sender_name,
+                subject,
+                html_body,
+                reply_to,
+                attachments=attachments,
+            )
         if result["success"]:
             st.success(f"✅ Test sent to {sender_email} — check your inbox!")
         else:
@@ -179,8 +227,8 @@ def render_quick_send():
         if st.button("📤 Import", key="qs_bulk_import"):
             if bulk_text.strip():
                 added, skipped = 0, 0
-                for line in bulk_text.strip().split('\n'):
-                    email = line.strip().strip(',').strip(';')
+                for line in bulk_text.strip().split("\n"):
+                    email = line.strip().strip(",").strip(";")
                     if email and is_valid_email(email):
                         if email not in st.session_state.qs_recipients:
                             st.session_state.qs_recipients.append(email)
@@ -249,19 +297,31 @@ def render_quick_send():
             else:
                 html_body = plain_text_to_html(body)
 
+            # Read attachment bytes once before the loop
+            attachments = [
+                {"name": f.name, "data": f.read()} for f in (uploaded_files or [])
+            ]
+
             success_count, fail_count = 0, 0
             progress = st.progress(0)
             status_text = st.empty()
             results_container = st.container()
 
             for i, recipient_email in enumerate(st.session_state.qs_recipients):
-                status_text.text(f"📤 Sending to {recipient_email}... ({i + 1}/{total})")
+                status_text.text(
+                    f"📤 Sending to {recipient_email}... ({i + 1}/{total})"
+                )
                 progress.progress((i + 1) / total)
 
                 result = send_email(
-                    sender_email, sender_password, sender_name,
-                    recipient_email, subject, html_body,
+                    sender_email,
+                    sender_password,
+                    sender_name,
+                    recipient_email,
+                    subject,
+                    html_body,
                     reply_to=reply_to,
+                    attachments=attachments,
                 )
 
                 log_send(
@@ -286,6 +346,8 @@ def render_quick_send():
 
             with results_container:
                 if success_count:
-                    st.success(f"✅ Successfully sent {success_count}/{total} email(s)!")
+                    st.success(
+                        f"✅ Successfully sent {success_count}/{total} email(s)!"
+                    )
                 if fail_count:
                     st.error(f"❌ Failed: {fail_count}/{total}")

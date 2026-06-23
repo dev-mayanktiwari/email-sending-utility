@@ -1,26 +1,42 @@
 """
 Template Mode tab — create, manage, and send templated emails with custom variables.
 """
+
 import time
+
 import streamlit as st
 
+from storage.history import log_send
+from storage.templates import (
+    delete_template,
+    get_template,
+    get_template_names,
+    load_templates,
+    save_template,
+)
 from ui.credentials import get_credentials, is_connected
 from ui.styles import render_section_divider, render_variable_tags
 from utils.email_sender import send_email, send_test_email
-from utils.validators import is_valid_email, extract_variables, substitute_variables, validate_recipient_data
 from utils.markdown_parser import markdown_to_html, plain_text_to_html
-from storage.templates import load_templates, save_template, delete_template, get_template_names, get_template
-from storage.history import log_send
+from utils.validators import (
+    extract_variables,
+    is_valid_email,
+    substitute_variables,
+    validate_recipient_data,
+)
 
 
 def render_template_mode():
     """Render the Template Mode tab."""
-    st.markdown("""
+    st.markdown(
+        """
     <div class="glass-card">
         <h3>📝 Template Mode</h3>
         <p style="color: #8b8fa3; margin: 0;">Create reusable templates with custom variables. Personalize every email at scale.</p>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # ── Template Management ──────────────────────────────────
     _render_template_editor()
@@ -93,7 +109,7 @@ def _render_template_editor():
             color, note = "#fb7185", "too long — may get clipped"
         st.markdown(
             f'<p style="font-size:0.78rem; color:{color}; margin-top:-8px;">'
-            f'{char_count} chars — {note}</p>',
+            f"{char_count} chars — {note}</p>",
             unsafe_allow_html=True,
         )
 
@@ -116,14 +132,18 @@ def _render_template_editor():
         st.markdown("**Detected Variables:**")
         render_variable_tags(detected_vars)
     elif all_text.strip():
-        st.caption("💡 *Tip: Use `${variable_name}` syntax to add dynamic variables (e.g., `${name}`, `${company}`, `${role}`).*")
+        st.caption(
+            "💡 *Tip: Use `${variable_name}` syntax to add dynamic variables (e.g., `${name}`, `${company}`, `${role}`).*"
+        )
 
     # Save / Delete / Duplicate buttons
     col1, col2, col3, col4 = st.columns([1.2, 1, 1, 1])
 
     with col1:
         save_label = "💾 Save Template" if is_new else "💾 Update"
-        if st.button(save_label, key="tm_save", type="primary", use_container_width=True):
+        if st.button(
+            save_label, key="tm_save", type="primary", use_container_width=True
+        ):
             if not template_name:
                 st.error("Template name is required.")
             elif not subject_template:
@@ -229,7 +249,9 @@ def _render_recipients_section():
                     st.warning("This email is already added.")
                 else:
                     new_recipient = {k: v for k, v in field_values.items()}
-                    is_valid, error_msg = validate_recipient_data(new_recipient, variables)
+                    is_valid, error_msg = validate_recipient_data(
+                        new_recipient, variables
+                    )
                     if is_valid:
                         st.session_state.tm_recipients.append(new_recipient)
                         st.rerun()
@@ -250,11 +272,11 @@ def _render_recipients_section():
         if st.button("📤 Import", key="tm_bulk_import"):
             if bulk_csv.strip():
                 added, skipped = 0, 0
-                lines = bulk_csv.strip().split('\n')
+                lines = bulk_csv.strip().split("\n")
                 existing_emails = {r["email"] for r in st.session_state.tm_recipients}
 
                 for line in lines:
-                    parts = [p.strip() for p in line.split(',')]
+                    parts = [p.strip() for p in line.split(",")]
                     # Skip header row if it matches field names
                     if parts == fields:
                         continue
@@ -273,7 +295,9 @@ def _render_recipients_section():
                 if added:
                     st.success(f"Imported {added} recipient(s).")
                 if skipped:
-                    st.warning(f"Skipped {skipped} row(s) (invalid, incomplete, or duplicate).")
+                    st.warning(
+                        f"Skipped {skipped} row(s) (invalid, incomplete, or duplicate)."
+                    )
                 if added:
                     st.rerun()
 
@@ -301,11 +325,22 @@ def _render_recipients_section():
         st.info("Add at least one recipient to preview and send emails.")
 
 
-def _render_email_preview_card(subject: str, body_html: str, sender_name: str, sender_email: str, recipient_email: str):
+def _render_email_preview_card(
+    subject: str,
+    body_html: str,
+    sender_name: str,
+    sender_email: str,
+    recipient_email: str,
+):
     """Render a visual email preview card showing exactly what the recipient sees."""
-    from_display = f"{sender_name} &lt;{sender_email}&gt;" if sender_name else sender_email or "you@gmail.com"
+    from_display = (
+        f"{sender_name} &lt;{sender_email}&gt;"
+        if sender_name
+        else sender_email or "you@gmail.com"
+    )
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="
         background: #1e293b;
         border: 1px solid rgba(148, 163, 184, 0.15);
@@ -336,7 +371,9 @@ def _render_email_preview_card(subject: str, body_html: str, sender_name: str, s
             {body_html}
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def _render_preview_and_send():
@@ -354,6 +391,20 @@ def _render_preview_and_send():
         return
 
     st.markdown("#### 👁️ Preview & Send")
+
+    # ── Attachments ──────────────────────────────────────────
+    st.markdown("#### 📎 Attachments")
+    uploaded_files = st.file_uploader(
+        "Attach files (optional)",
+        accept_multiple_files=True,
+        key="tm_attachments",
+        label_visibility="collapsed",
+    )
+    if uploaded_files:
+        st.caption(
+            f"{len(uploaded_files)} file(s) attached: "
+            + ", ".join(f"`{f.name}`" for f in uploaded_files)
+        )
 
     # Preview selector
     preview_options = [f"{r['email']}" for r in recipients]
@@ -391,16 +442,36 @@ def _render_preview_and_send():
 
     # Test send button — always visible, locked until connected
     can_test = is_connected()
-    test_tooltip = "Send a test copy to your own inbox" if can_test else "To unlock: connect credentials in sidebar"
-    if st.button("📨 Send Test to Myself", key="tm_test_send", disabled=not can_test, help=test_tooltip):
+    test_tooltip = (
+        "Send a test copy to your own inbox"
+        if can_test
+        else "To unlock: connect credentials in sidebar"
+    )
+    if st.button(
+        "📨 Send Test to Myself",
+        key="tm_test_send",
+        disabled=not can_test,
+        help=test_tooltip,
+    ):
         sender_email, sender_password, sender_name, reply_to = get_credentials()
         use_markdown = st.session_state.get("format_as_markdown", True)
         if use_markdown:
             test_html = markdown_to_html(preview_body)
         else:
             test_html = plain_text_to_html(preview_body)
+        attachments = [
+            {"name": f.name, "data": f.read()} for f in (uploaded_files or [])
+        ]
         with st.spinner("Sending test email..."):
-            result = send_test_email(sender_email, sender_password, sender_name, preview_subject, test_html, reply_to)
+            result = send_test_email(
+                sender_email,
+                sender_password,
+                sender_name,
+                preview_subject,
+                test_html,
+                reply_to,
+                attachments=attachments,
+            )
         if result["success"]:
             st.success(f"✅ Test sent to {sender_email} — check your inbox!")
         else:
@@ -438,6 +509,11 @@ def _render_preview_and_send():
         status_text = st.empty()
         results_container = st.container()
 
+        # Read attachment bytes once before the loop
+        attachments = [
+            {"name": f.name, "data": f.read()} for f in (uploaded_files or [])
+        ]
+
         for i, rec in enumerate(recipients):
             status_text.text(f"📤 Sending to {rec['email']}... ({i + 1}/{total})")
             progress.progress((i + 1) / total)
@@ -451,9 +527,14 @@ def _render_preview_and_send():
                 html_body = plain_text_to_html(final_body)
 
             result = send_email(
-                sender_email, sender_password, sender_name,
-                rec["email"], final_subject, html_body,
+                sender_email,
+                sender_password,
+                sender_name,
+                rec["email"],
+                final_subject,
+                html_body,
                 reply_to=reply_to,
+                attachments=attachments,
             )
 
             log_send(
